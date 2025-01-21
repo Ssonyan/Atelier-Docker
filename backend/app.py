@@ -18,6 +18,7 @@ def get_db_connection():
 
 @app.route('/api/health')
 def health():
+    print("Health endpoint hit!")
     return jsonify({
         "status": "healthy",
         "timestamp": datetime.now().isoformat()
@@ -35,6 +36,7 @@ def db_test():
 
 @app.route('/api/system-check')
 def system_check():
+    print("System check endpoint hit!")
     # Test database connection
     try:
         conn = get_db_connection()
