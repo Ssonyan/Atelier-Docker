@@ -1,0 +1,86 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: myapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    secrets:
+      - db_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+    networks:
+      - backend
+
+  flask:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DB_HOST=postgres
+      - DB_NAME=myapp
+      - DB_USER=postgres
+      - DB_PASSWORD_FILE=/run/secrets/db_password
+    secrets:
+      - db_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - frontend
+      - backend
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - VITE_API_URL=http://localhost/api
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4173"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - frontend
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      frontend:
+        condition: service_healthy
+      flask:
+        condition: service_started
+    networks:
+      - frontend
+
+networks:
+  frontend:
+  backend:
+
+volumes:
+  postgres_data:
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt

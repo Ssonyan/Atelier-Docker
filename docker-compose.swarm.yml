@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: myapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    secrets:
+      - db_password
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+    networks:
+      - backend
+
+  flask:
+    image: ${REGISTRY:-localhost}/myapp-flask:${TAG:-latest}
+    environment:
+      - DB_HOST=postgres
+      - DB_NAME=myapp
+      - DB_USER=postgres
+      - DB_PASSWORD_FILE=/run/secrets/db_password
+    secrets:
+      - db_password
+    deploy:
+      replicas: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - frontend
+      - backend
+
+  frontend:
+    image: ${REGISTRY:-localhost}/myapp-frontend:${TAG:-latest}
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+    networks:
+      - frontend
+
+  nginx:
+    image: ${REGISTRY:-localhost}/myapp-nginx:${TAG:-latest}
+    ports:
+      - "80:80"
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+    networks:
+      - frontend
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    command: -H unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    ports:
+      - "9000:9000"
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+    networks:
+      - frontend
+
+networks:
+  frontend:
+    driver: overlay
+  backend:
+    driver: overlay
+    internal: true
+
+volumes:
+  postgres_data:
+  portainer_data:
+
+secrets:
+  db_password:
+    external: true
